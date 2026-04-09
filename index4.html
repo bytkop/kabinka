@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3-КАБИНКА.РУ | ЦЕНТР УПРАВЛЕНИЯ</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #86ff00;
+            --bg: #0b0e11;
+            --panel: #1a1d21;
+            --terminal-bg: #050505;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* Дизайн в стиле сайта со скриншота */
+        header {
+            width: 100%;
+            padding: 20px;
+            text-align: center;
+            background: rgba(0,0,0,0.5);
+            border-bottom: 1px solid #333;
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: var(--primary);
+            text-transform: uppercase;
+        }
+
+        .container {
+            max-width: 1000px;
+            width: 90%;
+            padding: 40px 0;
+        }
+
+        h1 { text-align: center; font-size: 2.5rem; margin-bottom: 10px; }
+        .subtitle { text-align: center; color: #888; margin-bottom: 40px; }
+
+        /* Терминал-симулятор */
+        #terminal-window {
+            background: var(--terminal-bg);
+            border: 2px solid #333;
+            border-radius: 12px;
+            padding: 20px;
+            font-family: 'Courier New', Courier, monospace;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+            height: 500px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .terminal-output {
+            flex-grow: 1;
+            white-space: pre-wrap;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+
+        .terminal-input-line {
+            display: flex;
+            align-items: center;
+            color: var(--primary);
+        }
+
+        #user-input {
+            background: transparent;
+            border: none;
+            color: var(--primary);
+            font-family: inherit;
+            font-size: 1rem;
+            outline: none;
+            flex-grow: 1;
+            margin-left: 10px;
+        }
+
+        .red-alert { color: #ff3e3e; font-weight: bold; }
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+
+        /* Стили для диаграммы под терминалом */
+        .stats-card {
+            background: var(--panel);
+            margin-top: 30px;
+            padding: 30px;
+            border-radius: 20px;
+            border: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .chart-wrap { width: 250px; height: 250px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">3-КАБИНКА.РУ</div>
+</header>
+
+<div class="container">
+    <h1>Система управления <span>ПУ</span></h1>
+    <p class="subtitle">Узел: Жуковская МБОУ СШ №5 | Доступ только для лидеров</p>
+
+    <div id="terminal-window" onclick="document.getElementById('user-input').focus()">
+        <div id="output" class="terminal-output"></div>
+        <div class="terminal-input-line" id="input-area">
+            <span>>></span>
+            <input type="text" id="user-input" autofocus autocomplete="off">
+        </div>
+    </div>
+
+    <div class="stats-card">
+        <h3>Голоса за отряд</h3>
+        <div class="chart-wrap">
+            <canvas id="voteChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    const output = document.getElementById('output');
+    const input = document.getElementById('user-input');
+    const inputArea = document.getElementById('input-area');
+    
+    let isLogged = false;
+    let attempts = 3;
+    let currentState = "LOGIN"; // Состояния: LOGIN, MENU, ATTACK
+
+    // Звуковой движок (взамен winsound)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSound(freq, duration, type='square') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        osc.start();
+        osc.stop(audioCtx.currentTime + (duration/1000));
+    }
+
+    function print(text, style = "") {
+        const span = document.createElement('div');
+        if(style) span.className = style;
+        span.innerText = text;
+        output.appendChild(span);
+        output.parentElement.scrollTop = output.parentElement.scrollHeight;
+    }
+
+    function clear() {
+        output.innerHTML = "";
+    }
+
+    const logo = `
+  _____  _    _   _  __   _    ____ ___ _   _ _  __    _    
+ |  __ \\| |  | | | |/ /  / \\  | __ )_ _| \\ | | |/ /   / \   
+ | |__) | |  | | | ' /  / _ \\ |  _ \\| ||  \\| | ' /   / _ \\  
+ |  ___/| |__| | | . \\ / ___ \\| |_) | || |\\  | . \\  / ___ \\ 
+ |_|     \\____/  |_|\\_/_/   \\_\\____/___|_| \\_|_|\\_\\/_/   \\_\\
+    `;
+
+    function showLogin() {
+        clear();
+        print("========================================");
+        print("       СИСТЕМА ЗАБЛОКИРОВАНА            ");
+        print(`       ОСТАЛОСЬ ПОПЫТОК: ${attempts}    `);
+        print("========================================");
+        print("\nВВЕДИТЕ ПАРОЛЬ ДОСТУПА:");
+        input.type = "password";
+    }
+
+    function showMenu() {
+        clear();
+        print(`УЗЕЛ: 3-КАБИНКА-ЦЕНТР | ДАТА: ${new Date().toLocaleString()}`);
+        print(logo);
+        print("\n[ 1 ] ПРОВЕРКА СОСТОЯНИЯ ПУ");
+        print("[ 2 ] ЗАПУСТИТЬ АТАКУ НА КАБИНКУ");
+        print("[ 3 ] ВСЕОБЩИЙ ЧАТ ЛИДЕРОВ");
+        print("[ E ] ВЫХОД ИЗ СИСТЕМЫ");
+        print("\nОЖИДАНИЕ КОМАНДЫ...", "blink");
+        input.type = "text";
+        currentState = "MENU";
+    }
+
+    // Обработка ввода
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const val = input.value.toLowerCase().trim();
+            input.value = "";
+
+            if (currentState === "LOGIN") {
+                if (val === "борода") {
+                    playSound(800, 200);
+                    isLogged = true;
+                    print("ДОСТУП РАЗРЕШЕН. ЗАГРУЗКА...", "primary");
+                    setTimeout(showMenu, 1000);
+                } else {
+                    attempts--;
+                    playSound(400, 500);
+                    if (attempts <= 0) {
+                        clear();
+                        print("ПРЕВЫШЕНО КОЛИЧЕСТВО ПОПЫТОК!", "red-alert");
+                        inputArea.style.display = "none";
+                        return;
+                    }
+                    showLogin();
+                }
+            } 
+            else if (currentState === "MENU") {
+                if (val === "1") {
+                    playSound(1000, 50);
+                    print("ДИАГНОСТИКА: СТАТУС НОРМА");
+                } else if (val === "2") {
+                    currentState = "ATTACK";
+                    print("\nВВЕДИТЕ НОМЕР КАБИНКИ (1-5):");
+                } else if (val === "3") {
+                    print("\nССЫЛКА: https://t.me/+1E55WYA6lAM0MzZi");
+                    window.open("https://t.me/+1E55WYA6lAM0MzZi", "_blank");
+                } else if (val === "iluha") {
+                    playSound(600, 500); playSound(900, 500);
+                    print("!!! ALARM !!! ЗАПУСК ФЕКАЛЬНЫХ МАСС!", "red-alert");
+                } else if (val === "e") {
+                    location.reload();
+                }
+            }
+            else if (currentState === "ATTACK") {
+                if (val === "3") {
+                    playSound(400, 600);
+                    print("ОТКАЗАНО В ДОСТУПЕ. ОШИБКА 67.", "red-alert");
+                } else {
+                    playSound(1500, 500);
+                    print(`ЦЕЛЬ #${val} ВЗЯТА НА СОПРОВОЖДЕНИЕ. ТРАЕКТОРИЯ РАССЧИТАНА.`);
+                }
+                setTimeout(showMenu, 2500);
+            }
+        }
+    });
+
+    // Диаграмма (Chart.js)
+    const vCtx = document.getElementById('voteChart').getContext('2d');
+    new Chart(vCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['За отряд', 'Остальные'],
+            datasets: [{
+                data: [75, 25],
+                backgroundColor: ['#86ff00', '#222'],
+                borderWidth: 0
+            }]
+        },
+        options: { cutout: '80%', plugins: { legend: { display: false } } }
+    });
+
+    showLogin();
+</script>
+
+</body>
+</html>
